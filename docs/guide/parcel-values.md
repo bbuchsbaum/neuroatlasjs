@@ -26,8 +26,9 @@ ID column or a table from a different atlas version before anything is drawn:
 <<< @/snippets/error-code.ts#helper
 :::
 
-When a table reports only some regions, fill the rest explicitly, as above. That
-keeps "no value" a visible decision.
+When a table reports only some regions, pass `{ missing }` to say what the
+others get, as above. That keeps "no value" a visible decision. Duplicate and
+unknown IDs are still errors.
 
 ## Painting values onto the brain
 
@@ -42,16 +43,22 @@ truncate the values.
 ## Working with a subset
 
 `subset` keeps the regions a predicate accepts. It keeps their IDs and order, and
-turns every other label into background:
+turns every other label into background. A subset that removes no region shares
+the original's region table, so existing values still apply:
 
 <<< @/snippets/parcel-values.ts#subset
 
 ## Moving values between atlases
 
-Values belong to the region table that created them. Passing them to a different
-atlas fails, even when the IDs agree. Two atlases can use the same number for
-different regions, and an identity check is the only safe default. Transfer
-values deliberately with `rebind`:
+Values belong to the region table that created them. Passing them to an atlas
+with a different table fails, even when the IDs agree. Two atlases can use the
+same number for different regions, and an identity check is the only safe
+default.
+
+Atlases can share a table. Build the second atlas with the first atlas's
+`regions` (a `RegionIndex`), and values bound to either work with both. For
+example, a volume and a surface version of one parcellation that use the same
+IDs can share it. Otherwise, transfer values deliberately with `rebind`:
 
 <<< @/snippets/parcel-values.ts#rebind
 

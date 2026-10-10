@@ -3,7 +3,7 @@ import { errorCode } from './error-code.js';
 import { atlas } from './visual-atlas.js';
 
 // #region catch
-import { AtlasError } from 'neuroatlasjs';
+import { isAtlasError } from 'neuroatlasjs';
 import type { Region } from 'neuroatlasjs';
 
 // Resolve a short label typed by a user; report ambiguity
@@ -12,9 +12,9 @@ function lookup(label: string): Region | 'ambiguous' {
   try {
     return atlas.regions.resolve({ label });
   } catch (error) {
-    const ambiguous = error instanceof AtlasError
-      && error.code === 'AMBIGUOUS_REGION';
-    if (ambiguous) return 'ambiguous';  // ask which hemisphere
+    if (isAtlasError(error, 'AMBIGUOUS_REGION')) {
+      return 'ambiguous';  // ask which hemisphere was meant
+    }
     throw error;
   }
 }

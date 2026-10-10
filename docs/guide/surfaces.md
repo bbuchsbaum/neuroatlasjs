@@ -17,7 +17,7 @@ different IDs.
 
 The atlas knows nothing about the mesh. It stores labels in vertex order, and
 **you** guarantee that your data uses the same vertex order: the same mesh and
-resolution. Equal vertex counts and a matching `space` name do not prove that.
+resolution. Equal vertex counts and a matching `template` name do not prove that.
 
 ## Summaries and projection
 
@@ -26,7 +26,8 @@ resolution. Equal vertex counts and a matching `space` name do not prove that.
 
 <<< @/snippets/surfaces.ts#reduce
 
-Means are vertex-weighted, not area-weighted. The `nonFinite` and `statistic`
+`samples` returns one region's raw values from each hemisphere. Means are
+vertex-weighted, not area-weighted. The `nonFinite` and `statistic`
 options are the same as for volumes
 ([Summarizing Data by Parcel](./reducing)).
 
@@ -52,6 +53,10 @@ the surface:
 
 The vermis has no surface region, so its value is ignored. Matching by full label
 requires each target full label to occur exactly once in the source.
+
+If the two atlases use the same IDs for the same regions, skip rebinding: build
+the surface atlas with `regions: volumeAtlas.regions`, and they share one region
+table and its values.
 
 ## Next
 

@@ -45,7 +45,7 @@ It needs Node 22 or later, or any modern browser bundler. The package ships an
 ES module build and a CommonJS build, each with TypeScript declarations.
 
 ::: tip Status
-Version 0.1.0 is pre-release. The API is small and extensively tested, but names may
+Version 0.2.0 is pre-release. The API is small and extensively tested, but names may
 still change before 1.0.
 :::
 

@@ -1,7 +1,7 @@
 import { LabelAssignment } from './assignment.js';
 import { AtlasError, assertPredicate, brand, checkIndex, isArrayLike, isRecord } from './errors.js';
 import { ParcelAccumulator, ParcelValues, rebindValues, reductionOptions } from './parcels.js';
-import type { ParcelEntry, RebindOptions, ReductionOptions } from './parcels.js';
+import type { BindOptions, ParcelEntry, RebindOptions, ReductionOptions } from './parcels.js';
 import { RegionIndex } from './regions.js';
 import type { Region, RegionSelector } from './regions.js';
 import { metadataSnapshot, optionsObject } from './types.js';
@@ -75,6 +75,14 @@ function inverseOf(affine: readonly number[]): readonly number[] {
   return inverse;
 }
 
+/** Finite and nonnegative; -0 is stored as 0. */
+function checkTolerance(tolerance: unknown): number {
+  if (typeof tolerance !== 'number' || !(tolerance >= 0) || !Number.isFinite(tolerance)) {
+    throw new AtlasError('INVALID_METADATA', 'affineTolerance must be a finite, nonnegative number.');
+  }
+  return tolerance + 0;
+}
+
 function assertVolume(volume: unknown): asserts volume is VolumeLike {
   if (!isRecord(volume) || typeof volume.getData !== 'function' || typeof volume.length !== 'number') {
     throw new AtlasError('INVALID_DATA', 'Expected a volume with space, length, and getData().');
@@ -93,6 +101,10 @@ function assertConstructor(value: unknown): void {
 
 export interface VolumeAtlasOptions<S extends VolumeSpace> extends AtlasMetadata {
   readonly volume: VolumeLike<S>;
+  /**
+   * The region table. Pass another atlas's `regions` (a RegionIndex) to share it:
+   * ParcelValues bound to either atlas then work with both.
+   */
   readonly regions: Iterable<Region>;
   /**
    * Largest absolute difference allowed in each affine entry when an input grid is
@@ -124,15 +136,12 @@ export class VolumeAtlas<S extends VolumeSpace = VolumeSpace> {
   constructor(options: VolumeAtlasOptions<S>) {
     const { volume, regions, affineTolerance = 0, ...metadata } = optionsObject(options, 'VolumeAtlas');
     this.metadata = metadataSnapshot(metadata);
-    if (typeof affineTolerance !== 'number' || !(affineTolerance >= 0) || !Number.isFinite(affineTolerance)) {
-      throw new AtlasError('INVALID_METADATA', 'affineTolerance must be a finite, nonnegative number.');
-    }
-    this.affineTolerance = affineTolerance;
+    this.affineTolerance = checkTolerance(affineTolerance);
     assertVolume(volume);
     this.space = volume.space;
     this.#grid = gridOf(this.space);
     this.#inverse = inverseOf(this.#grid.affine);
-    this.regions = new RegionIndex(regions);
+    this.regions = RegionIndex.from(regions);
     const labels = volume.getData();
     if (volume.length !== this.#grid.size || !isArrayLike(labels) || labels.length !== this.#grid.size) {
       throw new AtlasError('GRID_MISMATCH', 'Volume data length does not match its grid.');
@@ -196,20 +205,52 @@ export class VolumeAtlas<S extends VolumeSpace = VolumeSpace> {
     return { region, space: this.space, indices: this.#assignment.indices(region.id) };
   }
 
-  /** Preserves IDs, region order, and affineTolerance; removed labels become background. */
+  /**
+   * Preserves IDs, region order, and affineTolerance; removed labels become
+   * background. A subset that keeps every region shares this atlas's region table.
+   */
   subset(predicate: (region: Region) => boolean): VolumeAtlas<S> {
     assertPredicate(predicate);
     this.#assertSpaceUnchanged();
-    const regions = this.regions.items.filter(predicate);
-    const labels = this.#assignment.subset(new Set(regions.map(region => region.id)));
+    const kept = this.regions.items.filter(predicate);
+    const regions = kept.length === this.regions.size ? this.regions : kept;
+    const labels = this.#assignment.subset(new Set(kept.map(region => region.id)));
     return new VolumeAtlas({
       ...this.metadata, regions, affineTolerance: this.affineTolerance,
       volume: { space: this.space, length: this.size, getData: () => labels },
     });
   }
 
-  /** Bind an exact set of ID-keyed values to this atlas. Input order is irrelevant. */
-  values(entries: Iterable<ParcelEntry>): ParcelValues { return new ParcelValues(this.regions, entries); }
+  /**
+   * The same atlas with another affineTolerance. It shares this atlas's region
+   * table, so {@link ParcelValues} bound to either atlas work with both.
+   */
+  withAffineTolerance(affineTolerance: number): VolumeAtlas<S> {
+    checkTolerance(affineTolerance);
+    this.#assertSpaceUnchanged();
+    const labels = this.#assignment.copy();
+    return new VolumeAtlas({
+      ...this.metadata, regions: this.regions, affineTolerance,
+      volume: { space: this.space, length: this.size, getData: () => labels },
+    });
+  }
+
+  /**
+   * Bind ID-keyed values to this atlas. Input order is irrelevant. Every region
+   * needs a value unless `options.missing` supplies one.
+   */
+  values(entries: Iterable<ParcelEntry>, options?: BindOptions): ParcelValues {
+    return new ParcelValues(this.regions, entries, options);
+  }
+
+  /** One region's samples from a volume on the atlas grid, in flat voxel order, as float64. */
+  samples(selector: RegionSelector, volume: VolumeLike): Float64Array {
+    const region = this.regions.resolve(selector);
+    assertVolume(volume);
+    assertGrid(this.#grid, gridOf(volume.space), this.affineTolerance);
+    if (volume.length !== this.size) throw new AtlasError('GRID_MISMATCH', 'Volume length differs.');
+    return this.#assignment.samples(region.id, volume.getData());
+  }
 
   /** Transfer values bound to another atlas (e.g. a parent or a surface atlas) to this one. */
   rebind(values: ParcelValues, options?: RebindOptions): ParcelValues {

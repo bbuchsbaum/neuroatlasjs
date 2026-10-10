@@ -1,7 +1,8 @@
 import { LabelAssignment } from './assignment.js';
+import type { VolumeAtlas } from './volume.js';
 import { AtlasError, assertPredicate, brand, describe, isRecord } from './errors.js';
 import { ParcelAccumulator, ParcelValues, rebindValues } from './parcels.js';
-import type { ParcelEntry, RebindOptions, ReductionOptions } from './parcels.js';
+import type { BindOptions, ParcelEntry, RebindOptions, ReductionOptions } from './parcels.js';
 import { RegionIndex } from './regions.js';
 import type { Region, RegionSelector } from './regions.js';
 import { metadataSnapshot, optionsObject } from './types.js';
@@ -14,6 +15,10 @@ export interface HemispherePair<T> {
 }
 
 export interface SurfaceAtlasOptions extends AtlasMetadata, HemispherePair<ArrayLike<number>> {
+  /**
+   * The region table. Pass another atlas's `regions` (a RegionIndex) to share it:
+   * ParcelValues bound to either atlas then work with both.
+   */
   readonly regions: Iterable<Region>;
 }
 
@@ -33,7 +38,7 @@ export class SurfaceAtlas {
   constructor(options: SurfaceAtlasOptions) {
     const { left, right, regions, ...metadata } = optionsObject(options, 'SurfaceAtlas');
     this.metadata = metadataSnapshot(metadata);
-    this.regions = new RegionIndex(regions);
+    this.regions = RegionIndex.from(regions);
     this.#left = new LabelAssignment(left, this.regions);
     this.#right = new LabelAssignment(right, this.regions);
     for (const hemisphere of ['left', 'right'] as const) {
@@ -67,16 +72,28 @@ export class SurfaceAtlas {
     return { region, left: this.#left.indices(region.id), right: this.#right.indices(region.id) };
   }
 
+  /** Like {@link VolumeAtlas.subset}: a subset that keeps every region shares the region table. */
   subset(predicate: (region: Region) => boolean): SurfaceAtlas {
     assertPredicate(predicate);
-    const regions = this.regions.items.filter(predicate);
-    const keep = new Set(regions.map(region => region.id));
+    const kept = this.regions.items.filter(predicate);
+    const regions = kept.length === this.regions.size ? this.regions : kept;
+    const keep = new Set(kept.map(region => region.id));
     return new SurfaceAtlas({
       ...this.metadata, regions, left: this.#left.subset(keep), right: this.#right.subset(keep),
     });
   }
 
-  values(entries: Iterable<ParcelEntry>): ParcelValues { return new ParcelValues(this.regions, entries); }
+  /** Bind ID-keyed values to this atlas; see {@link VolumeAtlas.values}. */
+  values(entries: Iterable<ParcelEntry>, options?: BindOptions): ParcelValues {
+    return new ParcelValues(this.regions, entries, options);
+  }
+
+  /** One region's samples from each hemisphere's vertex data, in vertex order, as float64. */
+  samples(selector: RegionSelector, data: HemispherePair<ArrayLike<number>>): HemispherePair<Float64Array> {
+    const region = this.regions.resolve(selector);
+    if (!isRecord(data)) throw new AtlasError('INVALID_DATA', 'Expected { left, right } sample arrays.');
+    return { left: this.#left.samples(region.id, data.left), right: this.#right.samples(region.id, data.right) };
+  }
 
   /** Transfer values bound to another atlas (e.g. a parent or a volume atlas) to this one. */
   rebind(values: ParcelValues, options?: RebindOptions): ParcelValues {

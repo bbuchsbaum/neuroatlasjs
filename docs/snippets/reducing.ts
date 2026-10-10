@@ -54,9 +54,6 @@ const timecourse = [...atlas.reduceSeries(bold)]
 same(timecourse, [3, 6]);
 
 // #region grid
-import { VolumeAtlas } from 'neuroatlasjs';
-import { Int32NeuroVol } from 'neuroimjs';
-
 // The same grid, but another tool wrote its y origin
 // with a 0.00001 mm numerical error.
 const origin = [-3, -91.99999, 0];
@@ -68,15 +65,11 @@ const resaved = new Float64NeuroVol(
 // 'GRID_MISMATCH': by default, affines must match exactly
 errorCode(() => atlas.reduce(resaved));
 
-const tolerant = new VolumeAtlas({
-  ...atlas.metadata,
-  volume: atlas.toVolume(Int32NeuroVol),
-  regions: atlas.regions,
-  // Largest absolute difference allowed in any affine entry.
-  affineTolerance: 1e-4,
-});
+// The same atlas, accepting affine entries that differ by ≤ 1e-4
+const tolerant = atlas.withAffineTolerance(1e-4);
 tolerant.reduce(resaved).get(7);  // 3
 // #endregion grid
 same(errorCode(() => atlas.reduce(resaved)), 'GRID_MISMATCH');
 same(tolerant.reduce(resaved).get(7), 3);
 same(tolerant.metadata, atlas.metadata);
+same(tolerant.regions === atlas.regions, true);

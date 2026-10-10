@@ -156,6 +156,20 @@ export class RegionIndex implements Iterable<Region> {
     return this.find(label, hemisphere as Hemisphere | undefined);
   }
 
+  /**
+   * @internal True only for an instance created by this copy of the class, not a
+   * subclass, another build's copy, or a branded lookalike. Only such tables are
+   * shared between atlases without revalidation; anything else is copied.
+   */
+  static isGenuine(value: unknown): value is RegionIndex {
+    return isRecord(value) && #items in value && Object.getPrototypeOf(value) === RegionIndex.prototype;
+  }
+
+  /** @internal Shares a genuine table; validates and copies anything else. */
+  static from(regions: Iterable<Region>): RegionIndex {
+    return RegionIndex.isGenuine(regions) ? regions : new RegionIndex(regions);
+  }
+
   /** Position in the declared region order, with validation. */
   position(id: number): number {
     const position = this.#positions.get(id);

@@ -10,15 +10,18 @@ which region contains a given voxel or coordinate. The examples continue with
 
 <<< @/snippets/locating.ts#roi
 
-The array is a new copy on every call, and you own it. Use the indices to pull
-a region's samples out of any data on the same grid:
+The array is a new copy on every call, and you own it.
+
+To get a region's values from a map, use `samples`. It checks the map's grid
+against the atlas, as `reduce` does, and returns float64 values:
 
 <<< @/snippets/locating.ts#samples
 
-::: warning Map indices into a float array
-`roi.indices.map(...)` returns another `Uint32Array`, which silently truncates
-the samples to unsigned integers. Use `Float64Array.from(roi.indices, …)` or
-`Array.from(roi.indices, …)` as above.
+::: warning Indexing data yourself
+If you gather values with `roi.indices` instead, do not call
+`roi.indices.map(...)`. It returns another `Uint32Array`, which silently
+truncates the values to unsigned integers. Use
+`Float64Array.from(roi.indices, i => data[i])`.
 :::
 
 ## Flat indices and voxel coordinates

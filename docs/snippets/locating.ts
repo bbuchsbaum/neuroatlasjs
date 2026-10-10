@@ -18,11 +18,11 @@ same(roi.space === atlas.space, true);
 same(atlas.roi(120).indices, []);
 
 // #region samples
-const data = contrast.getData();
-
-// [2, 4, 3]: L_V1's samples, as float64
-const samples = Float64Array.from(roi.indices, i => data[i]!);
+// L_V1's samples from the contrast map, in voxel order:
+// Float64Array [2, 4, 3]
+atlas.samples({ fullLabel: 'L_V1' }, contrast);
 // #endregion samples
+const samples = atlas.samples({ fullLabel: 'L_V1' }, contrast);
 same(samples, [2, 4, 3]);
 same(samples instanceof Float64Array, true);
 

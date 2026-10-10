@@ -58,7 +58,8 @@ anatomy.
 
 Tools that write affines in single precision can introduce tiny differences
 between grids that are meant to be identical. To accept those, opt in with
-`affineTolerance` when you build the atlas:
+`affineTolerance` when you build the atlas, or derive a tolerant copy of an
+existing atlas:
 
 <<< @/snippets/reducing.ts#grid
 
@@ -66,7 +67,8 @@ between grids that are meant to be identical. To accept those, opt in with
 entry: millimetres for translations, and mm per voxel for the linear part. The
 bottom row must always be exactly `[0, 0, 0, 1]`. The tolerance defaults to 0,
 meaning exact, and dimensions must always match exactly. Subsets inherit the
-tolerance. Keep it small. A tolerance large enough to hide
+tolerance. `withAffineTolerance` returns a copy that shares the original's region
+table, so `ParcelValues` bound to either atlas work with both. Keep it small. A tolerance large enough to hide
 a real shift would silently mix regions.
 
 If your data really is on a different grid, resample it to the atlas grid first,

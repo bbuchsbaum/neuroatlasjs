@@ -38,6 +38,19 @@ export class AtlasError extends Error {
   }
 }
 
+/**
+ * True when `error` is an {@link AtlasError}, and, if `code` is given, carries
+ * that code. Works across the ESM and CommonJS builds.
+ */
+export function isAtlasError(error: unknown): error is AtlasError;
+export function isAtlasError<C extends AtlasErrorCode>(
+  error: unknown,
+  code: C,
+): error is AtlasError & { readonly code: C };
+export function isAtlasError(error: unknown, code?: AtlasErrorCode): boolean {
+  return error instanceof AtlasError && (code === undefined || error.code === code);
+}
+
 /** @internal Objects and functions, excluding null. */
 export function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
   return (typeof value === 'object' && value !== null) || typeof value === 'function';

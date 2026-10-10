@@ -7,13 +7,27 @@ export interface ParcelEntry {
   readonly value: number;
 }
 
-/** Values bound to one atlas's region table, in that table's declared order. */
+export interface BindOptions {
+  /**
+   * Value for regions the entries do not mention, e.g. NaN. By default every
+   * region must have an entry.
+   */
+  readonly missing?: number;
+}
+
+/** Values bound to one region table, in that table's declared order. */
 export class ParcelValues implements Iterable<ParcelEntry> {
   static { brand(this, 'ParcelValues'); }
   readonly #data: Float64Array;
 
-  constructor(readonly regions: RegionIndex, entries: Iterable<ParcelEntry>) {
-    if (!(regions instanceof RegionIndex)) throw new AtlasError('INVALID_DATA', 'Expected a RegionIndex.');
+  constructor(readonly regions: RegionIndex, entries: Iterable<ParcelEntry>, options: BindOptions = {}) {
+    if (!RegionIndex.isGenuine(regions)) {
+      throw new AtlasError('INVALID_DATA', 'Expected a RegionIndex created by this copy of neuroatlasjs.');
+    }
+    if (!isRecord(options as unknown) ||
+        (options.missing !== undefined && typeof options.missing !== 'number')) {
+      throw new AtlasError('INVALID_DATA', `Invalid binding options ${describe(options)}.`);
+    }
     if (!isRecord(entries) || typeof (entries as Partial<Iterable<ParcelEntry>>)[Symbol.iterator] !== 'function') {
       throw new AtlasError('INVALID_DATA', 'Parcel values must be an iterable of { id, value } entries.');
     }
@@ -29,7 +43,11 @@ export class ParcelValues implements Iterable<ParcelEntry> {
     }
     if (seen.size !== regions.size) {
       const missing = regions.ids.filter(id => !seen.has(id));
-      throw new AtlasError('PARCEL_MISMATCH', `Missing values for region IDs: ${missing.join(', ')}.`);
+      if (options.missing === undefined) {
+        throw new AtlasError('PARCEL_MISMATCH',
+          `Missing values for region IDs: ${missing.join(', ')}. Pass { missing: NaN } to fill them.`);
+      }
+      for (const id of missing) this.#data[regions.position(id)] = options.missing;
     }
     Object.freeze(this);
   }

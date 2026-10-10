@@ -44,6 +44,7 @@ atlas.roi({ label: 'visual', hemisphere: 'left' }).indices; // Uint32Array [1, 3
 
 const signal = new Float64NeuroVol(space, new Float64Array([0, 2, 10, 4, 20, 6]));
 const means = atlas.reduce(signal);
+atlas.samples(42, signal);     // Float64Array [10, 20], region 42's raw values
 means.get(7);                  // 4
 means.get(42);                 // 15
 means.toArray();               // Float64Array [4, 15], in declared region order
@@ -87,10 +88,14 @@ const values = atlas.values([
 const data = atlas.project(values, 0); // Float64Array with zero background
 ```
 
-Missing, duplicate, and unknown IDs are errors. `ParcelValues` belongs to the
-specific atlas region table that created it: passing values from another atlas
-to `project` or `mapValues` fails, even when the numeric IDs agree, and even for
-a subset. Transfer them explicitly with `rebind`:
+Duplicate and unknown IDs are errors, and so are missing IDs unless you say
+what they get: `atlas.values(rows, { missing: NaN })`.
+
+`ParcelValues` belongs to the region table that created it: passing values to an
+atlas with a different table fails, even when the numeric IDs agree. Atlases
+built from the same `RegionIndex` (pass `regions: other.regions`) share it, as do
+`withAffineTolerance()` and a `subset()` that keeps every region. Otherwise,
+transfer values explicitly with `rebind`:
 
 ```ts
 const left = atlas.subset(region => region.hemisphere === 'left');
@@ -117,7 +122,9 @@ dimensions alone are insufficient. There is no implicit resampling or transform.
 By default affines must match exactly. Headers stored in float32 often differ by
 about 1e-6 between tools; to accept that, opt in when constructing the atlas with
 `affineTolerance`, the largest absolute difference allowed in any affine entry
-(for example `1e-4`, in millimetres for translations). Subsets inherit it.
+(for example `1e-4`, in millimetres for translations). Subsets inherit it, and
+`atlas.withAffineTolerance(1e-4)` derives a tolerant copy that shares the
+original's region table and values.
 
 ```ts
 const sums = atlas.reduce(signal, { statistic: 'sum', nonFinite: 'omit' });
@@ -148,7 +155,7 @@ import { SurfaceAtlas } from 'neuroatlasjs';
 
 const surface = new SurfaceAtlas({
   name: 'Surface example',
-  space: 'fsaverage6',
+  template: 'fsaverage6',
   regions: [
     { id: 7, label: 'visual', hemisphere: 'left' },
     { id: 42, label: 'visual', hemisphere: 'right' },
@@ -170,7 +177,7 @@ span both arrays. Empty hemispheres and empty subsets are supported.
 
 You are responsible for the correspondence of input vertices to the atlas.
 Array lengths and declared hemispheres are checked; equal vertex counts or a
-shared space name do not establish mesh correspondence. The core does not load,
+shared `template` name do not establish mesh correspondence. The core does not load,
 resample, or infer meshes.
 
 ## API boundaries
@@ -182,27 +189,33 @@ resample, or infer meshes.
 | `SurfaceAtlas` | Left/right label snapshots, ROI indices, reduction, projection |
 | `ParcelValues` | Complete ID-keyed values bound to one region table; move with `rebind` |
 | `Atlas` | `kind: 'volume' \| 'surface'` discriminated union |
-| `AtlasError` | Stable error `code` plus an explanatory message |
+| `AtlasError` | Stable error `code` plus an explanatory message; test with `isAtlasError(error, code?)` |
 
 Voxel and vertex indices are zero-based; volumes use neuroimjs's x-fastest
 layout. Out-of-range index queries throw. World lookup uses nearest voxel
 centers (voxel *i* covers grid coordinates [*i* − 0.5, *i* + 0.5)) and the affine
 captured at construction; background and points outside the grid return
-`undefined`. Spaces must not change after construction: `subset`, `toVolume`,
-and `mapValues` throw `GRID_MISMATCH` if the space no longer matches.
+`undefined`. Spaces must not change after construction: `subset`,
+`withAffineTolerance`, `toVolume`, and `mapValues` throw `GRID_MISMATCH` if the
+space no longer matches.
 
-Atlas classes are final: they freeze their instances, so subclasses cannot add
-fields. Wrap them instead.
+Atlas classes are final: they freeze their instances, so subclasses cannot
+declare public instance fields. Wrap them instead.
 
 The package ships an ESM build and a bundled CommonJS build. `instanceof` checks
 on `AtlasError` and the atlas classes work across the two, so an error thrown by
 code that `require`s the package is still an `AtlasError` to code that `import`s
-it. Values and atlases from both builds can also be mixed. Branching on
-`error.code` remains the most robust check.
+it, and `isAtlasError` accepts it. Values and atlases from both builds can also
+be mixed.
 
 The core intentionally excludes atlas catalogs/downloads, NIfTI/GIFTI readers,
 caches, probabilistic maps, registration, dilation, mesh geometry, and rendering.
 Load labels with neuroimjs or your own I/O, and supply their region table here.
+
+## Changes
+
+See [CHANGELOG.md](CHANGELOG.md). Version 0.2.0 renamed the `space` metadata
+field to `template`.
 
 ## Development
 

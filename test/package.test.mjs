@@ -44,3 +44,19 @@ test('instanceof agrees across the ESM and CommonJS builds', async () => {
   const target = new esm.SurfaceAtlas({ name: 'y', regions: [{ id: 7, label: 'x' }], left: [], right: [7] });
   assert.equal(target.rebind(values).get(7), 1);
 });
+
+test('cross-build region tables are copied rather than shared, and isAtlasError spans builds', async () => {
+  const esm = await import('neuroatlasjs');
+  const cjs = createRequire(import.meta.url)('neuroatlasjs');
+  const source = new cjs.SurfaceAtlas({ name: 'c', regions: [{ id: 7, label: 'x' }], left: [7], right: [] });
+  const target = new esm.SurfaceAtlas({ name: 'e', regions: source.regions, left: [], right: [7] });
+  assert.notEqual(target.regions, source.regions);
+  assert.deepEqual(target.regions.ids, [7]);
+  const values = source.values([{ id: 7, value: 3 }]);
+  assert.throws(() => target.project(values), { code: 'PARCEL_MISMATCH' });
+  assert.equal(target.rebind(values).get(7), 3);
+  let error;
+  try { source.regions.resolve('x'); } catch (caught) { error = caught; }
+  assert.ok(esm.isAtlasError(error, 'INVALID_SELECTOR'));
+  assert.ok(!esm.isAtlasError(error, 'UNKNOWN_REGION'));
+});

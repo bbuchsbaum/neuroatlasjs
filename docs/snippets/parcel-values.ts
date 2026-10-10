@@ -31,12 +31,11 @@ errorCode(() => atlas.values(twice));
 // 'UNKNOWN_REGION'
 errorCode(() => atlas.values([{ id: 8, value: 1 }]));
 
-// A partial table must say what the other regions get, here NaN.
-const reported = new Map([[7, 0.8], [42, 0.5]]);
-const partial = atlas.values(atlas.regions.ids.map(id => ({
-  id,
-  value: reported.get(id) ?? NaN,
-})));
+// A partial table must say what the other regions get.
+const partial = atlas.values(
+  [{ id: 7, value: 0.8 }, { id: 42, value: 0.5 }],
+  { missing: NaN },
+);
 partial.toArray();  // Float64Array [0.8, 0.5, NaN, NaN]
 // #endregion complete
 same(errorCode(() => atlas.values([{ id: 7, value: 0.8 }])), 'PARCEL_MISMATCH');
@@ -73,10 +72,14 @@ visual.regions.ids;  // [7, 42, 120]
 visual.labels();
 
 atlas.labels()[9];   // 99: the original atlas is unchanged
+
+// A subset that keeps every region shares the region table.
+atlas.subset(() => true).project(effects, 0)[1];  // 0.8
 // #endregion subset
 same(visual.regions.ids, [7, 42, 120]);
 same(visual.labels(), [0, 7, 42, 0, 7, 7, 42, 42, 0, 0, 0, 0]);
 same(atlas.labels()[9], 99);
+same(atlas.subset(() => true).project(effects, 0)[1], 0.8);
 
 // #region rebind
 // 'PARCEL_MISMATCH': effects are bound to `atlas`

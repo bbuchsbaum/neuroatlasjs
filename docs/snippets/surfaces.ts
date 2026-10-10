@@ -7,7 +7,7 @@ import { SurfaceAtlas } from 'neuroatlasjs';
 
 const surface = new SurfaceAtlas({
   name: 'Toy visual surface atlas',
-  space: 'fsaverage-toy',
+  template: 'fsaverage-toy',
   regions: [
     { id: 1, label: 'V1', fullLabel: 'L_V1', hemisphere: 'left' },
     { id: 2, label: 'V1', fullLabel: 'R_V1', hemisphere: 'right' },
@@ -37,7 +37,16 @@ const thickness = surface.reduce({
 // Vertex-weighted means: Float64Array [2.6, 2.5, 3.1]
 thickness.toArray();
 surface.project(thickness).right;  // Float64Array [2.5, 2.5, NaN]
+
+// One region's vertex values, per hemisphere
+const mt = surface.samples({ fullLabel: 'L_MT' }, {
+  left: [2.5, 2.7, 3.0, 0, 3.2],
+  right: [2.4, 2.6, 0],
+});
+mt.left;   // Float64Array [3, 3.2]
 // #endregion reduce
+same(mt.left, [3, 3.2]);
+same(mt.right, []);
 same(thickness.toArray(), [2.6, 2.5, 3.1]);
 same(surface.project(thickness).right, [2.5, 2.5, NaN]);
 

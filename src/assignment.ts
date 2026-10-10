@@ -67,10 +67,27 @@ export class LabelAssignment {
   }
 
   accumulate(data: ArrayLike<number>, accumulator: ParcelAccumulator): void {
+    this.#checkData(data);
+    accumulator.addPositions(this.#positions, data);
+  }
+
+  /** The samples of one region, in sample order, as float64. */
+  samples(id: number, data: ArrayLike<number>): Float64Array {
+    this.#checkData(data);
+    const indices = this.indices(id);
+    const output = new Float64Array(indices.length);
+    for (let i = 0; i < indices.length; i++) {
+      const value = data[indices[i]!];
+      if (typeof value !== 'number') throw new AtlasError('INVALID_DATA', 'Samples must be numeric.');
+      output[i] = value;
+    }
+    return output;
+  }
+
+  #checkData(data: ArrayLike<number>): void {
     if (!isArrayLike(data)) throw new AtlasError('INVALID_DATA', 'Samples must be an array-like of numbers.');
     if (data.length !== this.size) {
       throw new AtlasError('INVALID_DATA', `Expected ${this.size} samples, received ${data.length}.`);
     }
-    accumulator.addPositions(this.#positions, data);
   }
 }

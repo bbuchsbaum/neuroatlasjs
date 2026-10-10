@@ -1,5 +1,5 @@
 // #region helper
-import { AtlasError } from 'neuroatlasjs';
+import { isAtlasError } from 'neuroatlasjs';
 import type { AtlasErrorCode } from 'neuroatlasjs';
 
 /** The AtlasError code thrown by `attempt`, or undefined. */
@@ -9,7 +9,7 @@ export function errorCode(
   try {
     attempt();
   } catch (error) {
-    if (error instanceof AtlasError) return error.code;
+    if (isAtlasError(error)) return error.code;
     throw error;
   }
   return undefined;

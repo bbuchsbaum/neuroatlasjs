@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AtlasError, RegionIndex, SurfaceAtlas, VolumeAtlas } from '../dist/index.js';
+import { AtlasError, ParcelValues, RegionIndex, SurfaceAtlas, VolumeAtlas, isAtlasError } from '../dist/index.js';
 
 const regions = [
   { id: 42, label: 'visual', fullLabel: 'R_visual', hemisphere: 'right', color: [1, 2, 3] },
@@ -372,5 +372,143 @@ test('instanceof branding keeps ordinary semantics for subclasses and prototypes
   assert.ok(custom instanceof CustomError && custom instanceof AtlasError);
   assert.ok(!(AtlasError.prototype instanceof AtlasError));
   for (const primitive of [null, undefined, 1, 'AtlasError']) assert.ok(!(primitive instanceof AtlasError));
+  // The brand is versioned: an unversioned key never matches.
   assert.ok(!({ [Symbol.for('neuroatlasjs.class')]: 'RegionIndex' } instanceof RegionIndex));
+});
+
+test('samples returns one region\'s float64 samples after the same grid checks as reduce', () => {
+  const a = atlas();
+  const data = volume(new Float64Array([100, 2.5, 10, 4.25, 20, 6]));
+  const samples = a.samples({ fullLabel: 'L_visual' }, data);
+  assert.ok(samples instanceof Float64Array);
+  assert.deepEqual([...samples], [2.5, 4.25, 6]);
+  assert.deepEqual([...a.samples(99, data)], []);
+  assert.deepEqual([...a.samples(42, volume([NaN, 1, NaN, 1, Infinity, 1]))], [NaN, Infinity]);
+  assert.throws(() => a.samples(7, volume(data.getData(), space([3, 2, 1], 1))), code('GRID_MISMATCH'));
+  assert.throws(() => a.samples(7, volume(['a', 'b', 'c', 'd', 'e', 'f'])), code('INVALID_DATA'));
+  assert.throws(() => a.samples('visual', data), code('INVALID_SELECTOR'));
+  assert.throws(() => a.samples(7, null), code('INVALID_DATA'));
+  const surface = new SurfaceAtlas({ name: 's', regions, left: [7, 0, 7], right: [42, 99] });
+  const pair = surface.samples(7, { left: [1.5, 2, 3.5], right: [4, 5] });
+  assert.deepEqual([[...pair.left], [...pair.right]], [[1.5, 3.5], []]);
+  assert.throws(() => surface.samples(7, { left: [1], right: [4, 5] }), code('INVALID_DATA'));
+  assert.throws(() => surface.samples(7, null), code('INVALID_DATA'));
+});
+
+test('metadata space was renamed to template, and the old key is rejected, not dropped', () => {
+  const a = new VolumeAtlas({ name: 't', template: 'MNI152NLin2009cAsym', regions, volume: volume(labels) });
+  assert.equal(a.metadata.template, 'MNI152NLin2009cAsym');
+  assert.equal(a.subset(() => true).metadata.template, 'MNI152NLin2009cAsym');
+  assert.throws(() => new VolumeAtlas({ name: 't', space: 'MNI', regions, volume: volume(labels) }),
+    error => error.code === 'INVALID_METADATA' && /renamed to `template`/.test(error.message));
+  assert.throws(() => new SurfaceAtlas({ name: 's', space: 'fsaverage', regions, left: [], right: [] }),
+    code('INVALID_METADATA'));
+  assert.throws(() => new VolumeAtlas({ name: 't', template: ' ', regions, volume: volume(labels) }),
+    code('INVALID_METADATA'));
+});
+
+test('atlases built from one RegionIndex share it, and values move between them unchanged', () => {
+  const a = atlas();
+  const values = a.values([{ id: 7, value: 1 }, { id: 42, value: 2 }, { id: 99, value: 3 }]);
+  const tolerant = a.withAffineTolerance(1e-4);
+  assert.equal(tolerant.regions, a.regions);
+  assert.equal(tolerant.affineTolerance, 1e-4);
+  assert.equal(a.affineTolerance, 0);
+  assert.deepEqual(tolerant.metadata, a.metadata);
+  assert.deepEqual([...tolerant.project(values, 0)], [...a.project(values, 0)]);
+  assert.deepEqual([...tolerant.reduce(volume(new Float64Array(6).fill(1), space([3, 2, 1], 1e-5))).toArray()], [1, 1, NaN]);
+  assert.throws(() => a.withAffineTolerance(-1), code('INVALID_METADATA'));
+
+  const all = a.subset(() => true);
+  assert.equal(all.regions, a.regions);
+  assert.deepEqual([...all.project(values, 0)], [...a.project(values, 0)]);
+  assert.notEqual(a.subset(region => region.id !== 99).regions, a.regions);
+
+  const surface = new SurfaceAtlas({ name: 's', regions: a.regions, left: [7, 0], right: [42] });
+  assert.equal(surface.regions, a.regions);
+  assert.deepEqual([...surface.project(values, 0).left], [1, 0]);
+  assert.equal(surface.subset(() => true).regions, a.regions);
+  // A fresh table with identical content is still a different table.
+  assert.throws(() => atlas().project(values), code('PARCEL_MISMATCH'));
+});
+
+test('values can fill unmentioned regions explicitly; duplicates and unknown IDs still fail', () => {
+  const a = atlas();
+  const values = a.values([{ id: 42, value: 4.2 }], { missing: NaN });
+  assert.deepEqual([...values.toArray()], [4.2, NaN, NaN]);
+  assert.deepEqual([...a.values([{ id: 42, value: 1 }], { missing: 0 }).toArray()], [1, 0, 0]);
+  assert.deepEqual([...a.values([], { missing: -1 }).toArray()], [-1, -1, -1]);
+  assert.throws(() => a.values([{ id: 42, value: 1 }]), error =>
+    error.code === 'PARCEL_MISMATCH' && /Missing values for region IDs: 7, 99\. Pass \{ missing: NaN \}/.test(error.message));
+  assert.throws(() => a.values([{ id: 42, value: 1 }, { id: 42, value: 2 }], { missing: NaN }), code('PARCEL_MISMATCH'));
+  assert.throws(() => a.values([{ id: 8, value: 1 }], { missing: NaN }), code('UNKNOWN_REGION'));
+  for (const bad of [null, { missing: '0' }, { missing: null }]) {
+    assert.throws(() => a.values([], bad), code('INVALID_DATA'));
+  }
+});
+
+test('isAtlasError narrows by class and optional code, across failures', () => {
+  let caught;
+  try { atlas().regions.resolve({ label: 'visual' }); } catch (error) { caught = error; }
+  assert.equal(isAtlasError(caught), true);
+  assert.equal(isAtlasError(caught, 'AMBIGUOUS_REGION'), true);
+  assert.equal(isAtlasError(caught, 'UNKNOWN_REGION'), false);
+  for (const other of [new Error('x'), new TypeError('x'), null, undefined, 'AMBIGUOUS_REGION', { code: 'AMBIGUOUS_REGION' }]) {
+    assert.equal(isAtlasError(other), false);
+  }
+});
+
+test('only genuine region tables are shared; subclasses and branded lookalikes are validated copies', () => {
+  class Lenient extends RegionIndex {
+    get(id) { return id === 5 ? { id: 5, label: 'ghost' } : super.get(id); }
+    position(id) { return id === 5 ? 0 : super.position(id); }
+  }
+  const lenient = new Lenient(regions);
+  const copied = new VolumeAtlas({ name: 'c', regions: lenient, volume: volume(labels) });
+  assert.notEqual(copied.regions, lenient);
+  assert.deepEqual(copied.regions.ids, [42, 7, 99]);
+  assert.throws(() => new VolumeAtlas({ name: 'c', regions: lenient, volume: volume(new Int32Array([5, 7, 42, 7, 42, 7])) }),
+    code('INVALID_LABEL'));
+  assert.throws(() => new SurfaceAtlas({ name: 's', regions: lenient, left: [5], right: [] }), code('INVALID_LABEL'));
+
+  const forged = { [Symbol.for('neuroatlasjs.class.v0')]: 'RegionIndex', items: [{ id: -1, label: '' }],
+    *[Symbol.iterator]() { yield { id: -1, label: '' }; } };
+  assert.ok(forged instanceof RegionIndex);
+  assert.throws(() => new VolumeAtlas({ name: 'f', regions: forged, volume: volume(new Int32Array(6)) }),
+    code('INVALID_METADATA'));
+  assert.throws(() => new ParcelValues(forged, []), code('INVALID_DATA'));
+  assert.throws(() => new ParcelValues(lenient, []), code('INVALID_DATA'));
+  assert.throws(() => new ParcelValues(Object.create(RegionIndex.prototype), []), code('INVALID_DATA'));
+});
+
+test('a shared table still gets each atlas\'s own checks', () => {
+  const a = atlas();
+  assert.throws(() => new SurfaceAtlas({ name: 's', regions: a.regions, left: [42], right: [] }), code('INVALID_LABEL'));
+  assert.throws(() => new VolumeAtlas({ name: 'v', regions: a.regions, volume: volume(new Int32Array([0, 0, 0, 0, 0, 5])) }),
+    code('INVALID_LABEL'));
+});
+
+test('withAffineTolerance validates its argument and guards a mutated space', () => {
+  const a = atlas();
+  for (const bad of [undefined, null, NaN, Infinity, -1, '1e-4']) {
+    assert.throws(() => a.withAffineTolerance(bad), code('INVALID_METADATA'));
+  }
+  assert.ok(Object.is(a.withAffineTolerance(-0).affineTolerance, 0));
+  const grid = space();
+  const mutable = new VolumeAtlas({ name: 'm', regions, volume: volume(labels, grid) });
+  grid.dim = [6, 1, 1];
+  assert.throws(() => mutable.withAffineTolerance(1e-4), /changed after construction/);
+});
+
+test('samples and missing-value edge cases', () => {
+  const a = atlas();
+  assert.throws(() => a.samples(7, volume([1, , 2, 3, 4, 5])), code('INVALID_DATA'));            // hole inside region 7
+  assert.deepEqual([...a.samples(42, volume([, 1, 2, 3, 4, 5]))], [2, 4]);                       // hole outside is not read
+  assert.throws(() => a.samples(7, volume(new BigInt64Array(6))), code('INVALID_DATA'));
+  assert.deepEqual([...a.samples(7, volume(Float32Array.of(0, 0.5, 0, 1.5, 0, 2.5)))], [0.5, 1.5, 2.5]);
+  const surface = new SurfaceAtlas({ name: 's', regions, left: [7], right: [42] });
+  assert.throws(() => surface.samples(7, { left: [1] }), code('INVALID_DATA'));
+  const filled = a.values([{ id: 7, value: 1 }], { missing: -0 }).toArray();
+  assert.ok(Object.is(filled[0], -0) && Object.is(filled[2], -0));
+  assert.deepEqual([...a.values([], { missing: Infinity }).toArray()], [Infinity, Infinity, Infinity]);
 });

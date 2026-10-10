@@ -6,7 +6,12 @@ export type Point3 = readonly [x: number, y: number, z: number];
 export interface AtlasMetadata {
   readonly name: string;
   readonly description?: string;
-  readonly space?: string;
+  /**
+   * Name of the template or surface the atlas is defined on, e.g.
+   * 'MNI152NLin2009cAsym' or 'fsaverage6'. Called `space` before 0.2, a key
+   * that is now rejected.
+   */
+  readonly template?: string;
   readonly version?: string;
   readonly idConvention?: string;
   readonly citation?: string;
@@ -41,11 +46,15 @@ export interface SeriesLike {
   getVolume(frame: number): VolumeLike;
 }
 
-const OPTIONAL_METADATA = ['description', 'space', 'version', 'idConvention', 'citation'] as const;
+const OPTIONAL_METADATA = ['description', 'template', 'version', 'idConvention', 'citation'] as const;
 
 /** @internal Copies only the declared metadata fields. */
 export function metadataSnapshot(metadata: AtlasMetadata): Readonly<AtlasMetadata> {
   nonempty(metadata.name, 'Atlas name');
+  // Renamed in 0.2: dropping it silently would lose the caller's template name.
+  if ((metadata as { readonly space?: unknown }).space !== undefined) {
+    throw new AtlasError('INVALID_METADATA', 'Atlas metadata `space` was renamed to `template`.');
+  }
   const result: { -readonly [K in keyof AtlasMetadata]: AtlasMetadata[K] } = { name: metadata.name };
   for (const key of OPTIONAL_METADATA) {
     const value = metadata[key];

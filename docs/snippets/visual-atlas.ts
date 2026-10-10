@@ -17,7 +17,7 @@ const labels = new Int32NeuroVol(space, new Int32Array([
 
 export const atlas = new VolumeAtlas({
   name: 'Toy visual atlas',
-  space: 'MNI152NLin2009cAsym',  // a name, kept in atlas.metadata
+  template: 'MNI152NLin2009cAsym',  // a name, in atlas.metadata
   volume: labels,
   regions: [
     {
