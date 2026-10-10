@@ -1,5 +1,7 @@
 ---
 layout: home
+title: neuroatlasjs
+titleTemplate: Typed brain atlases for JavaScript
 
 hero:
   name: neuroatlasjs
