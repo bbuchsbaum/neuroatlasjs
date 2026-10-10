@@ -8,7 +8,12 @@ regions, summarize measurements, and project parcel values back to samples.
 workers. neuroimjs volumes and spaces work directly; no conversion wrapper or
 second copy of neuroimjs is required.
 
-This initial package is developed locally; it has not been published to npm.
+It is not yet published to npm. Install it from GitHub, pinned to a commit;
+npm builds it on install:
+
+```sh
+npm install github:bbuchsbaum/neuroatlasjs#<commit>
+```
 
 ## A volume atlas
 
