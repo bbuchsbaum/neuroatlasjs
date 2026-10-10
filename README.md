@@ -4,6 +4,8 @@ A small TypeScript core for categorical brain atlases. Attach validated region
 metadata to a volume or a pair of surface label arrays, query parcels, select
 regions, summarize measurements, and project parcel values back to samples.
 
+**Documentation: https://bbuchsbaum.github.io/neuroatlasjs/**
+
 **Zero runtime dependencies.** The same API works in Node, browser bundles, and
 workers. neuroimjs volumes and spaces work directly; no conversion wrapper or
 second copy of neuroimjs is required.

@@ -36,13 +36,23 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "npm run build && node --test test/*.test.mjs",
     "test:package": "node scripts/verify-package.mjs",
-    "check": "npm run typecheck && npm test && npm run test:package",
+    "check": "npm run typecheck && npm test && npm run test:package && npm run docs:check",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run check"
+    "prepublishOnly": "npm run check",
+    "docs:check": "tsc -p tsconfig.docs.json && node scripts/check-docs.mjs",
+    "docs:api": "typedoc",
+    "docs:dev": "npm run build && npm run docs:api && vitepress dev docs",
+    "docs:build": "npm run build && npm run docs:check && npm run docs:api && vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
     "neuroimjs": "0.5.0",
-    "typescript": "5.9.3"
+    "typedoc": "^0.28.20",
+    "typedoc-plugin-markdown": "^4.13.1",
+    "typedoc-vitepress-theme": "^1.1.4",
+    "typescript": "5.9.3",
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.43"
   }
 }
